@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EquiScan: Cancer Screening Gap Dashboard</title>
+    <!-- Importing Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Importing Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Importing Leaflet Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; }
+        .heatmap { filter: hue-rotate(350deg) opacity(0.6); } /* Redish heat */
+        .coolmap { filter: hue-rotate(180deg) opacity(0.6); } /* Greenish cool */
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- Navigation / Header -->
+    <nav class="bg-slate-900 text-white p-4 shadow-lg z-10">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-500 p-2 rounded-lg font-bold text-xl">EquiScan</div>
+                <span class="text-slate-300 font-light">CDC Data | Health Equity | Find Care</span>
+            </div>
+            <div class="space-x-4 text-sm">
+                <a href="#" class="hover:text-blue-400">Breast Cancer</a>
+                <a href="#" class="hover:text-blue-400">Colorectal</a>
+                <a href="#" class="hover:text-blue-400">Cervical</a>
+                <a href="#" class="text-orange-400 font-bold">Find a Clinic ↗</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto w-full p-4 flex-1 grid grid-cols-12 gap-4">
+        
+        <!-- Left Panel: Filters & Controls -->
+        <div class="col-span-12 lg:col-span-3 bg-white p-6 rounded-xl shadow-sm h-fit">
+            <h2 class="text-lg font-bold text-slate-800 mb-4">Data Controls</h2>
+            
+            <div class="mb-6">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Cancer Type</label>
+                <select id="cancerType" class="w-full border rounded p-2 bg-slate-50">
+                    <option value="breast">Breast Cancer</option>
+                    <option value="colorectal">Colorectal</option>
+                    <option value="cervical">Cervical</option>
+                    <option value="lung">Lung Cancer</option>
+                </select>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Filter View</label>
+                <div class="flex items-center space-x-2 mb-2">
+                    <input type="radio" name="filter" checked>
+                    <span class="text-sm">Show All</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <input type="checkbox" id="urbanGap" checked>
+                    <label for="urbanGap" class="text-sm">Urban vs Rural Gap</label>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <input type="checkbox" id="incomeGap" checked>
+                    <label for="incomeGap" class="text-sm">High vs Low Income</label>
+                </div>
+            </div>
+
+            <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                <p class="text-xs text-blue-800">
+                    <strong>Equity Insight:</strong> Screening rates for <span id="insight-text" class="font-bold">Breast Cancer</span> are 40% lower in rural states compared to national averages.
+                </p>
+            </div>
+        </div>
+
+        <!-- Center Panel: Map -->
+        <div class="col-span-12 lg:col-span-6 h-96 relative rounded-xl overflow-hidden shadow-inner border border-slate-200 bg-slate-100">
+            <div id="map"></div>
+            <!-- Floating Card -->
+            <div class="absolute bottom-4 left-4 bg-white p-3 rounded shadow-lg w-64">
+                <div class="text-xs text-slate-500 uppercase font-bold mb-1">Selected State</div>
+                <div class="text-xl font-bold text-slate-800">Mississippi</div>
+                <div class="text-xs text-red-500 mt-1">High Disparity Zone</div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Analytics -->
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-4">
+            
+            <!-- Stat Card 1 -->
+            <div class="bg-white p-6 rounded-xl shadow-sm">
+                <h3 class="text-sm font-bold text-slate-500 uppercase">Screening Rate</h3>
+                <div class="text-4xl font-black text-slate-800 mt-2">68%</div>
+                <p class="text-sm text-slate-400 mt-1">Average across US</p>
+            </div>
+
+            <!-- Stat Card 2 -->
+            <div class="bg-white p-6 rounded-xl shadow-sm">
+                <h3 class="text-sm font-bold text-slate-500 uppercase">The Gap</h3>
+                <div class="text-2xl font-bold text-orange-500 mt-2">-22%</div>
+                <p class="text-xs text-slate-400">Rural states lagging behind Urban</p>
+            </div>
+
+            <!-- Action Button -->
+            <button class="mt-auto w-full bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-slate-700 transition shadow-lg">
+                Find Screening Near Me
+            </button>
+
+        </div>
+    </div>
+
+    <!-- Interactive Script -->
+    <script>
+        // 1. Initialize Map
+        var map = L.map('map').setView([37.0902, -95.7129], 3); // Centered on US
+
+        // 2. Add Simple Tile Layer
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 19
+        }).addTo(map);
+
+        // 3. Mock Data (Simulating CDC Data Loading)
+        // In a real app, you would fetch this from an API
+        const usaCentroids = [
+            { name: "California", lat: 36.7783, lon: -119.4179, score: 0.8 },
+            { name: "Mississippi", lat: 32.7371, lon: -89.6954, score: 0.4 },
+            { name: "New York", lat: 40.7128, lon: -74.0060, score: 0.85 },
+            { name: "Arkansas", lat: 34.8737, lon: -92.3871, score: 0.55 }
+        ];
+
+        const colors = ["#089393", "#F11072", "#1E88E5"]; // Green, Pink, Blue
+
+        // 4. Render Mock States (Simple Circles for Prototype)
+        usaCentroids.forEach(state => {
+            const marker = L.circleMarker([state.lat, state.lon], {
+                color: '#fff',
+                fillColor: state.score > 0.7 ? '#22c55e' : (state.score < 0.6 ? '#ef4444' : '#facc15'),
+                fillOpacity: 1,
+                radius: 150 // Approximation
+            }).addTo(map).bindPopup(`<b>${state.name}</b><br>Screening Gap Score: ${(state.score * 100).toFixed(0)}%`);
+        });
+
+        // 5. Update Insight Text
+        const cancerSelect = document.getElementById('cancerType');
+        cancerSelect.addEventListener('change', (e) => {
+            const val = e.target.value;
+            const display = document.getElementById('insight-text');
+            
+            if(val === 'breast') {
+                display.innerText = "Breast Cancer";
+                display.style.color = "#dc2626";
+            } else if (val === 'colorectal') {
+                display.innerText = "Colorectal";
+                display.style.color = "#d97706";
+            } else if (val === 'cervical') {
+                display.innerText = "Cervical";
+                display.style.color = "#ec4899";
+            }
+        });
+
+        // 6. Simulate "Find Clinic" Action
+        document.querySelector('button').addEventListener('click', () => {
+            alert("Connecting to HRSA API...\nSearching for Federally Qualified Health Centers (FQHC) within 20 miles.\n\nFound 3 nearby locations.");
+        });
+    </script>
+</body>
+</html>
